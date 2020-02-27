@@ -1,0 +1,17 @@
+*.box
+*.iso
+*.exe
+.vs/
+log.txt
+boot_command_temp.txt
+.vagrant/
+http_distr/distrs1c*/**/*.tar.gz
+http_distr/postgresql_for_1c/**/postgresql_*_deb.tar.bz2
+packer_cache/
+output-virtualbox-iso/
+jenkins-nodes/**/.vagrant
+jenkins-nodes/**/agent.jar
+
+jenkins-nodes/shared/*
+!jenkins-nodes/shared/README.md
+jenkins-nodes/node-*/Vagrantfile

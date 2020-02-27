@@ -1,0 +1,5 @@
+# Never auto detect text files and perform LF normalization
+* text=false
+# Never modify line endings of our bash scripts
+*.sh -crlf
+*postgresql.conf -crlf

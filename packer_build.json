@@ -1,0 +1,241 @@
+{
+  "variables": {
+
+    "version_of_1c_platform_with_underscores": "{{env `version_of_1c_platform_with_underscores`}}",
+    "version_of_vm_os_with_underscore": "{{env `version_of_vm_os_with_underscore`}}",
+    "version_of_vm_os_with_dot": "{{env `version_of_vm_os_with_dot`}}",
+    "version_of_postgresql_with_underscores": "{{env `version_of_postgresql_with_underscores`}}",
+
+    "iso_url": "{{env `iso_url`}}",
+    "iso_checksum": "{{env `iso_checksum`}}",
+    "iso_checksum_type": "{{env `iso_checksum_type`}}",
+    "ssh_password": "{{env `ssh_password`}}",
+    "ssh_username": "{{env `ssh_username`}}",
+    "vm_name": "ci_node_ubuntu_{{env `version_of_vm_os_with_underscore`}}_1c_{{env `version_of_1c_platform_with_underscores`}}_pg_{{env `version_of_postgresql_with_underscores`}}",
+    "disk_size_mb": "{{env `disk_size_mb`}}",
+    "boot_command": "{{env `boot_command`}}",
+    "shutdown_command": "{{env `shutdown_command`}}"
+
+  },
+  "builders": [
+    {
+      "type": "virtualbox-iso",
+      "iso_url": "./iso/ubuntu-{{user `version_of_vm_os_with_dot`}}-live-server-amd64.iso",
+      "iso_checksum_type": "{{user `iso_checksum_type`}}",
+      "iso_checksum": "{{user `iso_checksum`}}",
+      "headless": false,
+      "communicator": "ssh",
+      "ssh_username": "{{user `ssh_username`}}",
+      "ssh_password": "{{user `ssh_password`}}",
+      "ssh_pty" : "true",
+	    "ssh_timeout": "15m",
+      "shutdown_command": "{{user `shutdown_command`}}",
+      "shutdown_timeout": "360m",
+      "guest_os_type": "Ubuntu_64",
+      "vm_name": "{{user `vm_name`}}",
+      "disk_size": "{{user `disk_size_mb`}}",
+      "http_directory": "http_distr",
+      "floppy_files": [],
+      "boot_wait": "1m",
+      "boot_command": ["{{user `boot_command`}}"],
+      "guest_additions_mode": "upload",
+      "guest_additions_path": "~/VBoxGuestAdditions.iso",
+      "vboxmanage": [
+        [ "modifyvm", "{{.Name}}", "--memory", "2048" ],
+        [ "modifyvm", "{{.Name}}", "--vram", "128" ],
+        [ "modifyvm", "{{.Name}}", "--cpus", "2" ],
+        [ "modifyvm", "{{.Name}}", "--nic1", "nat" ],
+        [ "modifyvm", "{{.Name}}", "--clipboard", "bidirectional" ],
+        [ "modifyvm", "{{.Name}}", "--draganddrop", "bidirectional" ],
+        [ "modifyvm", "{{.Name}}", "--accelerate3d", "on" ],
+        [ "modifyvm", "{{.Name}}", "--graphicscontroller", "vboxsvga" ]
+      ]
+    }
+  ],
+  "provisioners": [
+    {
+      "type": "shell",
+      "execute_command": "echo '{{user `ssh_password`}}' | {{ .Vars }} sudo -E -S sh '{{ .Path }}'",
+      "inline": [
+        "echo '%sudo    ALL=(ALL)  NOPASSWD:ALL' >> /etc/sudoers"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ============== INSTALLING DESKTOP ==============",
+        "sudo apt-get update",
+        "sudo apt-get install -y --no-install-recommends ubuntu-desktop"
+      ]
+    },
+    {"type": "shell", "expect_disconnect": "true", "inline": [ "sudo systemctl reboot"]},
+    {
+      "pause_before": "50s",
+      "type": "shell",
+      "inline": [
+        "echo ============== ENABLING AUTOLOGON ==============",
+        "sudo sed -i \"s/.*AutomaticLoginEnable =.*/AutomaticLoginEnable = true/\" /etc/gdm3/custom.conf",
+        "sudo sed -i \"s/.*AutomaticLogin =.*/AutomaticLogin = {{user `ssh_username`}}/\" /etc/gdm3/custom.conf",
+
+        "echo ====== DISABLING LOCKDOWN, SCREENSAVER, SWITCHING OFF DISPLAY ==============",
+        "gsettings set org.gnome.desktop.screensaver lock-enabled 'false'",
+        "gsettings set org.gnome.desktop.lockdown disable-lock-screen 'true'",
+        "gsettings set org.gnome.desktop.session idle-delay 0",
+
+        "echo ====== DISABLING POWER SAVING ==============",
+        "sudo apt-get install -y pm-utils",
+        "sudo pm-powersave false"
+      ]
+    },
+    {
+      "type": "shell",
+      "valid_exit_codes": [ 0, 100 ],
+      "inline": [
+        "echo ============== INSTALLING TERMINATOR AND OKULAR FOR PDF ==============",
+        "sudo apt-get install terminator -y",
+        "sudo apt-get install okular -y"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ============== INSTALLING VISUAL STUDIO CODE ==============",
+        "sudo apt-get install -y software-properties-common apt-transport-https wget",
+        "wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | sudo apt-key add -",
+        "sudo add-apt-repository \"deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main\"",
+        "sudo apt-get update",
+        "sudo apt-get install -y code",
+        "sudo rm /etc/apt/sources.list.d/vscode.list"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ============== INSTALLING AVAHI, SAMBA and TRACEROUTE ==============",
+        "sudo apt-get install -y avahi-discover",
+        "sudo apt-get install -y samba",
+        "sudo apt-get install -y traceroute"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ============== INSTALLING JAVA 8 FOR JENKINS NODE ==============",
+        "sudo apt-get install -y openjdk-8-jre-headless"
+      ]
+    },
+    {
+      "type": "shell",
+      "valid_exit_codes": [ 0, 255 ],
+      "inline": [
+        "echo ==================== INSTALLING ONESCRIPT ==============",
+        "sudo apt-get install -y mono-runtime || true",
+        "sudo apt-get --fix-broken install -y",
+        "wget -O one_script.deb https://oscript.io/downloads/latest/x64/onescript-engine_1.3.0_all.deb",
+        "sudo dpkg -i one_script.deb || true",
+        "sudo apt-get --fix-broken install -y",
+        "sudo opm install -all"
+      ]
+    },
+    {"type": "shell", "expect_disconnect": "true", "inline": [ "sudo systemctl reboot"]},
+    {
+      "pause_before": "50s",
+      "type": "shell",
+      "valid_exit_codes": [ 0, 2 ],
+      "inline": [
+        "echo ============ INSTALLING GUEST ADDITION AND BUILD TOOLS THAT ARE REQUIRED BY GEST ADDITIONS  ==============",
+        "sudo apt-get install -y linux-headers-$(uname -r) build-essential dkms",
+        "sudo mkdir /media/iso_guest_additions",
+        "sudo mount -o loop ~/VBoxGuestAdditions.iso /media/iso_guest_additions",
+        "sudo /media/iso_guest_additions/VBoxLinuxAdditions.run"
+      ]
+    },
+    {"type": "shell", "expect_disconnect": "true", "inline": [ "sudo systemctl reboot"]},
+    {
+      "pause_before": "50s",
+      "type": "shell",
+      "inline": [
+        "echo ====== ADDING USER TO vboxsf SO IT CAN ACCESS DIRECTORIES MOUNTED BY VirtualBox FROM HOST ==============",
+        "sudo adduser {{user `ssh_username`}} vboxsf",
+
+        "echo ====== CHANGING RESOLUTION. USER MUST BE LOGGED IN USING UBUNTU DESKTOP INTERFACE ==============",
+        "xrandr  -display :0.0 -s 1600x1200"
+      ]
+    },
+    {
+      "type": "shell",
+      "valid_exit_codes": [ 0, 1 ],
+      "inline": [
+        "echo ====== DISABLING UPGRADE SERVICE ==============",
+        "sudo systemctl disable apt-daily.service apt-daily-upgrade.service",
+        "sudo systemctl disable apt-daily.timer apt-daily-upgrade.timer"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": ["echo Diagnostic message - Packer http server pointed to distrs directory is $PACKER_HTTP_ADDR"]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ====== COPYING POSTGRESQL INSTALLATION PACKAGES AND SCRIPT ==============",
+        "wget -r -np -nH --cut-dirs 2 -P /home/{{user `ssh_username`}}/distrs/pg http://$PACKER_HTTP_ADDR/postgresql_for_1c/{{user `version_of_postgresql_with_underscores`}}/"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ==================== INSTALLING POSTGRESQL ==============",
+        "cd /home/{{user `ssh_username`}}/distrs/pg",
+        "bash ./postgresql_installation_script.sh {{user `ssh_password`}}"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ====== COPYING 1C INSTALLATION PACKAGES AND SCRIPT ==============",
+        "# wget -P /home/{{user `ssh_username`}}/distrs/1c http://$PACKER_HTTP_ADDR/distrs1c/nethasp.ini",
+        "wget -P /home/{{user `ssh_username`}}/distrs/1c http://$PACKER_HTTP_ADDR/distrs1c/deb64_{{user `version_of_1c_platform_with_underscores`}}.tar.gz",
+        "wget -P /home/{{user `ssh_username`}}/distrs/1c http://$PACKER_HTTP_ADDR/distrs1c/client_{{user `version_of_1c_platform_with_underscores`}}.deb64.tar.gz",
+        "wget -P /home/{{user `ssh_username`}}/distrs/1c http://$PACKER_HTTP_ADDR/distrs1c/install_1c_bundle.sh"
+      ]
+    },
+    {
+      "type": "shell",
+      "valid_exit_codes": [ 0, 1 ],
+      "inline": [
+        "echo ==================== INSTALLING 1C ==============",
+        "cd /home/{{user `ssh_username`}}/distrs/1c",
+        "bash ./install_1c_bundle.sh {{user `version_of_1c_platform_with_underscores`}}"
+      ]
+    },
+    {
+      "type": "shell",
+      "inline": [
+        "echo ======= INSTALLING APACHE AND ENABLE SITE FROM DIR default-ssl FOR PORT 433 USING SSL CERTIFICATES FROM APACHE PACKAGE ==============",
+        "sudo apt install -y apache2",
+        "sudo sed -i 's/.*ssl_module.*//' /etc/apache2/apache2.conf",
+        "echo ''| sudo tee -a /etc/apache2/apache2.conf",
+        "echo 'LoadModule ssl_module \"/usr/lib/apache2/modules/mod_ssl.so\"' | sudo tee -a /etc/apache2/apache2.conf",
+        "sudo a2enmod ssl",
+        "sudo a2ensite default-ssl",
+        "sudo systemctl restart apache2.service"
+      ]
+    },
+    {"type": "shell", "expect_disconnect": "true", "inline": [ "sudo systemctl reboot"]},
+    {
+      "pause_before": "50s",
+      "type": "shell",
+      "inline": [
+        "echo REBOOTED! THIS WAS THE LAST REBOOT BEFORE VAGRANT POST PROCESSOR."
+      ]
+    }
+  ],
+  "post-processors": [
+    {
+      "type": "vagrant",
+      "keep_input_artifact": true,
+      "output": "{{user `vm_name`}}_{{.Provider}}.box"
+    }
+  ]
+}

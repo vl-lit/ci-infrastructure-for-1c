@@ -1,0 +1,2 @@
+6fa9686bc299c19c97d280f79a723868 *ubuntu-19.04-desktop-amd64.iso
+9a659c92b961ef46f5c0fdc04b9269a6 *ubuntu-19.04-live-server-amd64.iso

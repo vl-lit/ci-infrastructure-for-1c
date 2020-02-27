@@ -1,0 +1,2 @@
+ee829212bbd90d6c0237701b10ad90fd *ubuntu-19.10-desktop-amd64.iso
+1b22a1a7cfcecbf47801a1133495ccfd *ubuntu-19.10-live-server-amd64.iso
