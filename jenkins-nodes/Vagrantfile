@@ -1,0 +1,113 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+# Vagrant.require_version ">= 1.6.2"
+
+Vagrant.configure("2") do |config|
+
+    $ssh_username = "vagrant"
+    $ssh_password = "vagrant"
+    $initRunType = "once"
+
+    config.vm.box = ENV['box_name']
+    config.vm.ignore_box_vagrantfile = true
+    config.vm.guest = :linux
+    config.vm.post_up_message = "Machine started"
+
+    config.vm.communicator = "ssh"
+    config.ssh.username = $ssh_username
+    config.ssh.password = $ssh_password
+
+    config.vm.network :forwarded_port, 
+                            guest: 22, 
+                            host: 2222, 
+                            id: "ssh", 
+                            auto_correct: true
+
+    config.vm.synced_folder ENV['shared_ci_host_directory'],
+                            ENV['shared_ci_guest_directory'], 
+                            automount: true, 
+                            create: true, 
+                            group: "vagrant", 
+                            owner: "vagrant"
+
+    config.vm.provider :virtualbox do |v, override|
+
+        v.name = ENV['node_name']
+        v.gui = true # Display the VirtualBox GUI when booting the machine
+
+        v.customize ["modifyvm", :id, "--memory", ENV['ram_memory_size_mb']]
+        v.customize ["modifyvm", :id, "--cpus", ENV['cpu_count']]
+        v.customize ["modifyvm", :id, "--vram", 64] # Video memory 64 MB
+        v.customize ["modifyvm", :id, "--clipboard", "bidirectional"]
+        v.customize ["modifyvm", :id, "--draganddrop", "bidirectional"]
+        v.customize ["modifyvm", :id, "--accelerate3d", "on"]
+
+        v.customize ["modifyvm", :id, "--nic1", "nat"]   # epn0s3
+        v.customize ["modifyvm", :id, "--nic2", "bridged"]  # epn0s8
+        v.customize ["modifyvm", :id, "--bridgeadapter2", ENV['host_phisical_adapter_name_for_bridge_connection']]
+
+    end
+
+    # ================================== HOST NAME AND IP CONFIGURATION ===============================
+
+    config.vm.provision "Removing current netplan configuration", type: "shell", run: $initRunType do |s|
+        s.inline = "find /etc/netplan -maxdepth 1 -type f -exec rm {} \\;"
+        s.privileged = true
+    end
+
+    config.vm.provision "Copying netplan configuration file to VM", type: "file", run: $initRunType do |f|
+        f.source = Dir.pwd + "/netplan_config.yaml"
+        f.destination   = "~/netplan_config.yaml"
+    end
+
+    config.vm.provision "Copying netplan configuration file to netplan configuration directory", 
+                        type: "shell", 
+                        run: $initRunType do |s|
+
+        s.inline = "cp /home/vagrant/netplan_config.yaml /etc/netplan/netplan_config.yaml"
+        s.privileged = true
+    end
+
+    config.vm.provision "Applying netplan configuration from file", type: "shell", run: $initRunType do |s|
+        s.inline = "netplan apply"
+        s.privileged = true
+    end
+
+    $changeHostNameScript =<<-SCRIPT
+    systemctl stop srv1cv83.service
+    systemctl stop avahi-daemon.service
+    CURRENT_HOSTNAME=`hostname`
+    NEW_HOSTNAME=#{ENV['node_name']}
+    echo "Setting hostname to : " $NEW_HOSTNAME
+    hostnamectl set-hostname $NEW_HOSTNAME
+    hostname $NEW_HOSTNAME
+    CHANGE_1C_HOSTNAME_COMMAND="find /home/usr1cv8/.1cv8/1C/1cv8 -type f -not -name '*.lgp' -exec sed -i 's/$CURRENT_HOSTNAME/$NEW_HOSTNAME/g' {} \\;"
+    echo $CHANGE_1C_HOSTNAME_COMMAND
+    eval "$CHANGE_1C_HOSTNAME_COMMAND"
+    systemctl start avahi-daemon.service
+    systemctl start srv1cv83.service
+    SCRIPT
+
+    config.vm.provision "Changing hostname for OS and 1C server", type: "shell", run: $initRunType do |s|
+        s.inline = $changeHostNameScript
+        s.privileged = true
+    end
+
+    # =======================================================================================================
+
+
+    config.vm.provision "Copying terminator configuration file", type: "file", run: $initRunType do |f|
+        f.source = Dir.pwd + "/../terminator_config"
+        f.destination   = "~/.config/terminator/config"
+    end
+
+    config.vm.provision "Waiting for GUI", type: "shell", run: $initRunType do |s|
+        s.inline = "sleep 20"
+    end
+
+    config.vm.provision "Setting screen resilution via xrandr", type: "shell", run: $initRunType do |s|
+        s.inline = "xrandr  -display :0.0 -s 1600x1200"
+        s.privileged = false
+    end
+
+end
