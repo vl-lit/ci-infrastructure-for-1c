@@ -110,4 +110,27 @@ Vagrant.configure("2") do |config|
         s.privileged = false
     end
 
+    # ======================== Configuring Jenkins node autostart============================================
+
+    config.vm.provision "Configuring and starting Jenkins node", type: "shell", run: $initRunType do |s|
+        s.path = Dir.pwd+"/../jenkins_node_configure.sh"
+        s.args = "#{ENV['host_machine_ip_or_hostname']} #{ENV['jenkins_port']} #{ENV['node_name']}"
+        s.privileged = false  # privileged must be false to correctly get $USER env.var in the script
+    end
+
+    config.vm.provision "CheckJenkinsNode", type: "shell", run: "never" do |s|
+
+        $checkJenkinsAgentScript =<<-SCRIPT
+        sleep 30
+        echo "Output of ps aux | grep agent.jar must contain information about running jenkins agent."
+        echo "If there is no such information then maybe Jenkins server or Jenkins agent is stopped:"
+        ps aux | grep agent.jar
+        SCRIPT
+
+        s.inline = $checkJenkinsAgentScript
+
+    end
+
+    # =======================================================================================================
+
 end
